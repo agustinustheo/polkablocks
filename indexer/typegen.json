@@ -1,0 +1,11 @@
+{
+  "outDir": "src/types",
+  "specVersions": "https://v2.archive.subsquid.io/metadata/paseo",
+  "pallets": {
+    "Balances": {
+      "events": [
+        "Transfer"
+      ]
+    }
+  }
+}
