@@ -5,7 +5,13 @@
   "main": "test.js",
   "scripts": {
     "start": "node test.js",
-    "test": "node test.js"
+    "test": "node test.js",
+    "forge:build": "cd contracts && forge build",
+    "forge:test": "cd contracts && forge test",
+    "forge:test:watch": "cd contracts && forge test --watch",
+    "forge:snapshot": "cd contracts && forge snapshot",
+    "forge:coverage": "cd contracts && forge coverage",
+    "forge:deploy": "cd contracts && forge script script/Deploy.s.sol:DeploySubscription --rpc-url $RPC_URL --broadcast"
   },
   "dependencies": {
     "@polkadot/util": "^13.5.6",
