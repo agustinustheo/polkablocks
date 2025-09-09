@@ -1,9 +1,14 @@
-# Ignore build artifacts from the local tests sub-crate.
-/target/
+# Compiler files
+cache/
+out/
 
-# Ignore backup files creates by cargo fmt.
-**/*.rs.bk
+# Ignores development broadcast logs
+!/broadcast
+/broadcast/*/31337/
+/broadcast/**/dry-run/
 
-# Remove Cargo.lock when creating an executable, leave it for libraries
-# More information here http://doc.crates.io/guide.html#cargotoml-vs-cargolock
-Cargo.lock
+# Docs
+docs/
+
+# Dotenv file
+.env
