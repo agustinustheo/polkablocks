@@ -3,17 +3,20 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import LoginPopup from "./polkablocks/loginPopup";
+import AuthPopup from "./polkablocks/loginPopup";
 
 const Header = () => {
-  const [showLoginPopup, setShowLoginPopup] = useState(false);
+  const [showAuthPopup, setShowAuthPopup] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
 
   // Check for stored user session on component mount
   useEffect(() => {
     const storedEmail = localStorage.getItem("polkablock_user_email");
-    if (storedEmail) {
+    const storedToken = localStorage.getItem("polkablock_session_token");
+    if (storedEmail && storedToken) {
       setUserEmail(storedEmail);
+      setSessionToken(storedToken);
     }
   }, []);
 
@@ -24,19 +27,39 @@ const Header = () => {
     { href: "/dashboard", label: "Dashboard" },
   ];
 
-  const handleLoginSuccess = (email: string) => {
+  const handleAuthSuccess = (email: string, token: string) => {
     setUserEmail(email);
+    setSessionToken(token);
     localStorage.setItem("polkablock_user_email", email);
+    localStorage.setItem("polkablock_session_token", token);
   };
 
-  const handleLogout = () => {
-    setUserEmail(null);
-    localStorage.removeItem("polkablock_user_email");
+  const handleLogout = async () => {
+    try {
+      if (sessionToken) {
+        // Call logout endpoint
+        await fetch("http://localhost:3001/api/auth/logout", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${sessionToken}`,
+            "Content-Type": "application/json",
+          },
+        });
+      }
+    } catch (error) {
+      console.error("Logout error:", error);
+    } finally {
+      // Clear local state regardless of API success
+      setUserEmail(null);
+      setSessionToken(null);
+      localStorage.removeItem("polkablock_user_email");
+      localStorage.removeItem("polkablock_session_token");
+    }
   };
 
   return (
     <>
-      <header className="sticky top-0 z-50 backdrop-blur-sm border-b border-gray-200/20 shadow-sm">
+      <header className="sticky top-0 z-50 backdrop-blur-sm border-b bg-black/80 border-gray-200/20 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             {/* Left: Logo & Brand */}
@@ -106,17 +129,15 @@ const Header = () => {
                   </button>
                 </div>
               ) : (
-                // Not logged in state
                 <button
-                  onClick={() => setShowLoginPopup(true)}
-                  className="px-4 py-2 bg-white text-black hover:cursor-pointer font-medium rounded-lg transition-all duration-200"
+                  onClick={() => setShowAuthPopup(true)}
+                  className="px-4 py-2 bg-white text-black font-medium  transition-all duration-200"
                 >
-                  Get Started
+                  Sign In
                 </button>
               )}
             </div>
 
-            {/* Mobile Menu Button */}
             <div className="md:hidden">
               <button
                 type="button"
@@ -142,7 +163,6 @@ const Header = () => {
             </div>
           </div>
 
-          {/* Mobile Navigation Menu */}
           <div className="md:hidden border-t border-gray-200/20">
             <div className="px-2 pt-2 pb-3 space-y-1 bg-black/20">
               {navigationItems.map((item, index) => (
@@ -175,10 +195,10 @@ const Header = () => {
                   </div>
                 ) : (
                   <button
-                    onClick={() => setShowLoginPopup(true)}
+                    onClick={() => setShowAuthPopup(true)}
                     className="w-full px-3 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-medium rounded-md"
                   >
-                    Get Started
+                    Sign In
                   </button>
                 )}
               </div>
@@ -187,10 +207,10 @@ const Header = () => {
         </div>
       </header>
 
-      <LoginPopup
-        isOpen={showLoginPopup}
-        onClose={() => setShowLoginPopup(false)}
-        onLoginSuccess={handleLoginSuccess}
+      <AuthPopup
+        isOpen={showAuthPopup}
+        onClose={() => setShowAuthPopup(false)}
+        onAuthSuccess={handleAuthSuccess}
       />
     </>
   );

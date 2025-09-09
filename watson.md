@@ -1,9 +1,7 @@
-1. Frontend:
+### Commands
 
-- Login/Register, magic link
-- Button dropdown of the users information
-
-2. Email services:
+1. cd frontend && yarn install && yarn dev
+2. cd backend && yarn install && yarn dev
 
 - Magic link on registration
 - Once registered, send full account information
