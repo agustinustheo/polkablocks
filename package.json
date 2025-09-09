@@ -1,0 +1,26 @@
+{
+  "name": "polkadot-wallet-generator",
+  "version": "1.0.0",
+  "description": "Generate Polkadot wallets and store them in PostgreSQL",
+  "main": "test.js",
+  "scripts": {
+    "start": "node test.js",
+    "test": "node test.js"
+  },
+  "dependencies": {
+    "@polkadot/util": "^13.5.6",
+    "@polkadot/util-crypto": "^13.5.6",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.10.7"
+  },
+  "keywords": [
+    "polkadot",
+    "wallet",
+    "postgresql",
+    "blockchain"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
+}
