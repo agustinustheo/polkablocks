@@ -3,4 +3,8 @@ src = "src"
 out = "out"
 libs = ["lib"]
 
+# Polkadot Asset Hub Testnet RPC configuration
+[rpc_endpoints]
+polkadot_testnet = "https://testnet-passet-hub-eth-rpc.polkadot.io"
+
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

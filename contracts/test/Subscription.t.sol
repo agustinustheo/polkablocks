@@ -3,17 +3,15 @@ pragma solidity ^0.8.0;
 
 import {Test, console2} from "forge-std/Test.sol";
 import {Subscription} from "../src/Subscription.sol";
-import {MockERC20} from "./mocks/MockERC20.sol";
 
 contract SubscriptionTest is Test {
     Subscription public subscription;
-    MockERC20 public token;
     
     address public owner;
     address public user1;
     address public user2;
     
-    uint256 public constant SUBSCRIPTION_AMOUNT = 100 * 10**18; // 100 tokens
+    uint256 public constant SUBSCRIPTION_AMOUNT = 0.1 ether; // 0.1 PAS
     uint256 public constant BILLING_INTERVAL = 30 days;
     
     event Subscribed(address indexed user, uint256 amount);
@@ -25,40 +23,32 @@ contract SubscriptionTest is Test {
         user1 = address(0x1);
         user2 = address(0x2);
         
-        // Deploy mock token
-        token = new MockERC20();
-        
         // Deploy subscription contract
-        subscription = new Subscription(address(token), SUBSCRIPTION_AMOUNT, BILLING_INTERVAL);
+        subscription = new Subscription(SUBSCRIPTION_AMOUNT, BILLING_INTERVAL);
         
-        // Mint tokens to test users
-        token.mint(user1, 1000 * 10**18);
-        token.mint(user2, 1000 * 10**18);
-        
-        // Setup approvals
-        vm.prank(user1);
-        token.approve(address(subscription), type(uint256).max);
-        
-        vm.prank(user2);
-        token.approve(address(subscription), type(uint256).max);
+        // Fund test users with native tokens
+        vm.deal(user1, 10 ether);
+        vm.deal(user2, 10 ether);
     }
+    
+    // Receive function to accept ETH
+    receive() external payable {}
     
     function testConstructor() public {
         assertEq(subscription.owner(), owner);
-        assertEq(subscription.paymentToken(), address(token));
         assertEq(subscription.subscriptionAmount(), SUBSCRIPTION_AMOUNT);
     }
     
     function testSubscribe() public {
-        uint256 user1BalanceBefore = token.balanceOf(user1);
-        uint256 contractBalanceBefore = token.balanceOf(address(subscription));
+        uint256 user1BalanceBefore = user1.balance;
+        uint256 contractBalanceBefore = address(subscription).balance;
         
         // Test subscription
         vm.expectEmit(true, false, false, true);
         emit Subscribed(user1, SUBSCRIPTION_AMOUNT);
         
         vm.prank(user1);
-        subscription.subscribe();
+        subscription.subscribe{value: SUBSCRIPTION_AMOUNT}();
         
         // Check subscription details
         (uint256 amount, uint256 lastBilled, bool active) = subscription.subscriptions(user1);
@@ -66,24 +56,24 @@ contract SubscriptionTest is Test {
         assertEq(lastBilled, block.timestamp);
         assertTrue(active);
         
-        // Check token balances
-        assertEq(token.balanceOf(user1), user1BalanceBefore - SUBSCRIPTION_AMOUNT);
-        assertEq(token.balanceOf(address(subscription)), contractBalanceBefore + SUBSCRIPTION_AMOUNT);
+        // Check balances
+        assertEq(user1.balance, user1BalanceBefore - SUBSCRIPTION_AMOUNT);
+        assertEq(address(subscription).balance, contractBalanceBefore + SUBSCRIPTION_AMOUNT);
     }
     
     function testCannotSubscribeTwice() public {
         vm.prank(user1);
-        subscription.subscribe();
+        subscription.subscribe{value: SUBSCRIPTION_AMOUNT}();
         
         vm.expectRevert("Already subscribed");
         vm.prank(user1);
-        subscription.subscribe();
+        subscription.subscribe{value: SUBSCRIPTION_AMOUNT}();
     }
     
     function testCancel() public {
         // First subscribe
         vm.prank(user1);
-        subscription.subscribe();
+        subscription.subscribe{value: SUBSCRIPTION_AMOUNT}();
         
         // Test cancellation
         vm.expectEmit(true, false, false, false);
@@ -106,23 +96,16 @@ contract SubscriptionTest is Test {
     function testBill() public {
         // Subscribe first
         vm.prank(user1);
-        subscription.subscribe();
-        
-        uint256 user1BalanceBefore = token.balanceOf(user1);
-        uint256 contractBalanceBefore = token.balanceOf(address(subscription));
+        subscription.subscribe{value: SUBSCRIPTION_AMOUNT}();
         
         // Move time forward
         vm.warp(block.timestamp + 31 days);
         
-        // Bill the user
+        // Bill the user (just marks as billed, no automatic transfer)
         vm.expectEmit(true, false, false, true);
         emit Billed(user1, SUBSCRIPTION_AMOUNT);
         
         subscription.bill(user1);
-        
-        // Check balances
-        assertEq(token.balanceOf(user1), user1BalanceBefore - SUBSCRIPTION_AMOUNT);
-        assertEq(token.balanceOf(address(subscription)), contractBalanceBefore + SUBSCRIPTION_AMOUNT);
         
         // Check lastBilled updated
         (,uint256 lastBilled,) = subscription.subscriptions(user1);
@@ -131,7 +114,7 @@ contract SubscriptionTest is Test {
     
     function testBillOnlyOwner() public {
         vm.prank(user1);
-        subscription.subscribe();
+        subscription.subscribe{value: SUBSCRIPTION_AMOUNT}();
         
         vm.expectRevert("Not owner");
         vm.prank(user2);
@@ -141,7 +124,7 @@ contract SubscriptionTest is Test {
     function testBillInactiveSubscription() public {
         // Subscribe and cancel
         vm.prank(user1);
-        subscription.subscribe();
+        subscription.subscribe{value: SUBSCRIPTION_AMOUNT}();
         
         vm.prank(user1);
         subscription.cancel();
@@ -154,23 +137,19 @@ contract SubscriptionTest is Test {
     function testWithdraw() public {
         // Subscribe users to get funds in contract
         vm.prank(user1);
-        subscription.subscribe();
+        subscription.subscribe{value: SUBSCRIPTION_AMOUNT}();
         
         vm.prank(user2);
-        subscription.subscribe();
+        subscription.subscribe{value: SUBSCRIPTION_AMOUNT}();
         
-        uint256 contractBalance = token.balanceOf(address(subscription));
-        uint256 ownerBalanceBefore = token.balanceOf(owner);
-        
-        // Approve subscription contract to transfer from itself
-        vm.prank(address(subscription));
-        token.approve(address(subscription), type(uint256).max);
+        uint256 contractBalance = address(subscription).balance;
+        uint256 ownerBalanceBefore = owner.balance;
         
         // Withdraw funds
         subscription.withdraw(contractBalance);
         
-        assertEq(token.balanceOf(owner), ownerBalanceBefore + contractBalance);
-        assertEq(token.balanceOf(address(subscription)), 0);
+        assertEq(owner.balance, ownerBalanceBefore + contractBalance);
+        assertEq(address(subscription).balance, 0);
     }
     
     function testWithdrawOnlyOwner() public {
@@ -182,11 +161,11 @@ contract SubscriptionTest is Test {
     function testMultipleUserScenario() public {
         // User1 subscribes
         vm.prank(user1);
-        subscription.subscribe();
+        subscription.subscribe{value: SUBSCRIPTION_AMOUNT}();
         
         // User2 subscribes
         vm.prank(user2);
-        subscription.subscribe();
+        subscription.subscribe{value: SUBSCRIPTION_AMOUNT}();
         
         // Move time forward
         vm.warp(block.timestamp + 31 days);
@@ -207,26 +186,45 @@ contract SubscriptionTest is Test {
         assertTrue(user1Active);
     }
     
-    function testInsufficientBalance() public {
-        // Create user with no tokens
-        address poorUser = address(0x3);
-        vm.prank(poorUser);
-        token.approve(address(subscription), type(uint256).max);
-        
-        // Try to subscribe without tokens
-        vm.expectRevert("Insufficient balance");
-        vm.prank(poorUser);
-        subscription.subscribe();
+    function testIncorrectPaymentAmount() public {
+        vm.expectRevert("Incorrect payment amount");
+        vm.prank(user1);
+        subscription.subscribe{value: SUBSCRIPTION_AMOUNT - 1}();
     }
     
-    function testInsufficientAllowance() public {
-        // Create user with tokens but no approval
-        address noApprovalUser = address(0x4);
-        token.mint(noApprovalUser, 1000 * 10**18);
+    function testPaySubscription() public {
+        // First subscribe
+        vm.prank(user1);
+        subscription.subscribe{value: SUBSCRIPTION_AMOUNT}();
         
-        // Try to subscribe without approval
-        vm.expectRevert("Insufficient allowance");
-        vm.prank(noApprovalUser);
-        subscription.subscribe();
+        uint256 contractBalanceBefore = address(subscription).balance;
+        
+        // Move time forward
+        vm.warp(block.timestamp + 31 days);
+        
+        // User pays subscription manually
+        vm.expectEmit(true, false, false, true);
+        emit Billed(user1, SUBSCRIPTION_AMOUNT);
+        
+        vm.prank(user1);
+        subscription.paySubscription{value: SUBSCRIPTION_AMOUNT}();
+        
+        // Check contract balance increased
+        assertEq(address(subscription).balance, contractBalanceBefore + SUBSCRIPTION_AMOUNT);
+        
+        // Check lastBilled updated
+        (,uint256 lastBilled,) = subscription.subscriptions(user1);
+        assertEq(lastBilled, block.timestamp);
+    }
+    
+    function testPaySubscriptionNotSubscribed() public {
+        vm.expectRevert("Not subscribed");
+        vm.prank(user1);
+        subscription.paySubscription{value: SUBSCRIPTION_AMOUNT}();
+    }
+    
+    function testInsufficientBalanceForWithdraw() public {
+        vm.expectRevert("Insufficient balance");
+        subscription.withdraw(1 ether);
     }
 }

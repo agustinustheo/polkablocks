@@ -1,13 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-interface IERC20 {
-    function transferFrom(address from, address to, uint256 amount) external returns (bool);
-}
-
 /**
  * @title Subscription
- * @dev Simple subscription contract for recurring payments using ERC20 tokens
+ * @dev Simple subscription contract for recurring payments using native tokens (ETH/PAS)
  */
 contract Subscription {
     // Stores information about each user's subscription
@@ -19,9 +15,6 @@ contract Subscription {
     
     // Contract owner who can bill users and withdraw funds
     address public owner;
-    
-    // ERC20 token used for payments
-    address public paymentToken;
     
     // Fixed subscription amount for all users
     uint256 public subscriptionAmount;
@@ -42,28 +35,26 @@ contract Subscription {
     
     /**
      * @dev Initializes the subscription contract
-     * @param _paymentToken Address of the ERC20 token for payments
-     * @param _amount Fixed subscription amount in tokens
+     * @param _amount Fixed subscription amount in wei
      * @param _interval Unused parameter (kept for compatibility)
      */
-    constructor(address _paymentToken, uint256 _amount, uint256 _interval) {
+    constructor(uint256 _amount, uint256 _interval) {
         owner = msg.sender;
-        paymentToken = _paymentToken;
         subscriptionAmount = _amount;
     }
     
     /**
      * @dev Allows users to start a subscription
      * - User must not have an active subscription
-     * - Transfers initial payment from user to contract
+     * - User must send exact subscription amount
      * - Sets subscription as active with current timestamp
      */
-    function subscribe() external {
+    function subscribe() external payable {
         // Check user doesn't already have active subscription
         require(!subscriptions[msg.sender].active, "Already subscribed");
         
-        // Transfer subscription payment from user to this contract
-        IERC20(paymentToken).transferFrom(msg.sender, address(this), subscriptionAmount);
+        // Check correct payment amount
+        require(msg.value == subscriptionAmount, "Incorrect payment amount");
         
         // Create new subscription record
         subscriptions[msg.sender] = UserSubscription({
@@ -91,19 +82,16 @@ contract Subscription {
     }
     
     /**
-     * @dev Allows owner to bill a user for their subscription
-     * - Only owner can bill users
+     * @dev Allows owner to mark a user as billed
+     * - Only owner can mark users as billed
      * - User must have active subscription
-     * - Transfers payment from user to contract
+     * - Note: With native tokens, users must manually send payments
      * - Updates last billing timestamp
      */
     function bill(address user) external onlyOwner {
         UserSubscription storage sub = subscriptions[user];
         // Verify subscription is active
         require(sub.active, "Not active");
-        
-        // Transfer subscription payment from user to contract
-        IERC20(paymentToken).transferFrom(user, address(this), sub.amount);
         
         // Update billing timestamp
         sub.lastBilled = block.timestamp;
@@ -113,9 +101,24 @@ contract Subscription {
     
     /**
      * @dev Allows owner to withdraw collected funds
-     * @param amount Number of tokens to withdraw
+     * @param amount Amount of wei to withdraw
      */
     function withdraw(uint256 amount) external onlyOwner {
-        IERC20(paymentToken).transferFrom(address(this), owner, amount);
+        require(address(this).balance >= amount, "Insufficient balance");
+        payable(owner).transfer(amount);
+    }
+    
+    /**
+     * @dev Allows users to pay their subscription manually
+     */
+    function paySubscription() external payable {
+        UserSubscription storage sub = subscriptions[msg.sender];
+        require(sub.active, "Not subscribed");
+        require(msg.value == sub.amount, "Incorrect payment amount");
+        
+        // Payment received, update last billed
+        sub.lastBilled = block.timestamp;
+        
+        emit Billed(msg.sender, sub.amount);
     }
 }
